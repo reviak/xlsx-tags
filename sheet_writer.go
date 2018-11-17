@@ -7,15 +7,15 @@ package xlsx_tags
 // 	format - optional formatting
 
 import (
-	"regexp"
+	"errors"
+	"fmt"
 	"github.com/tealeg/xlsx"
+	"reflect"
+	"regexp"
+	"sort"
 	"strconv"
 	"strings"
-	"fmt"
-	"reflect"
-	"sort"
 	"time"
-	"errors"
 )
 
 const tagName = "xls"
@@ -25,6 +25,8 @@ var (
 	ErrUnsupportedContentType = errors.New("trying to marshal unsupported content type. Currently supports only struct")
 	ErrHeadingPropRequired    = errors.New("heading property must be set")
 )
+
+var marshallerType = reflect.TypeOf((Marshaller)(nil))
 
 // todo think about name correctness
 type parseOpts struct {
@@ -44,6 +46,7 @@ func (o optsByOrder) Swap(i, j int)      { o[i], o[j] = o[j], o[i] }
 func (o optsByOrder) Less(i, j int) bool { return o[i].order < o[j].order }
 
 func WriteToSheet(sheet *xlsx.Sheet, data interface{}) error {
+	//fixme avoid code duplication
 	v := reflect.ValueOf(data)
 	kind := v.Kind()
 	if kind != reflect.Array && kind != reflect.Slice {
@@ -55,6 +58,25 @@ func WriteToSheet(sheet *xlsx.Sheet, data interface{}) error {
 		return ErrUnsupportedContentType
 	}
 
+	if itemsType.Implements(marshallerType) {
+		return writeWithMarshaller(sheet, data)
+	} else {
+		return writeWithTags(sheet, data)
+	}
+}
+
+func writeWithMarshaller(sheet *xlsx.Sheet, data interface{}) error {
+	m := data.(Marshaller)
+	writeHeading(sheet, m.Header())
+	for _, row := range m.Data() {
+		writeRow(sheet, row)
+	}
+	return nil
+}
+
+func writeWithTags(sheet *xlsx.Sheet, data interface{}) error {
+	v := reflect.ValueOf(data)
+	itemsType := getListType(data)
 	opts, err := getParseOptions(itemsType)
 	if err != nil {
 		return err
@@ -66,7 +88,7 @@ func WriteToSheet(sheet *xlsx.Sheet, data interface{}) error {
 		orderToCellPos[opt.order] = i
 	}
 	// write heading
-	writeHeading(sheet, opts)
+	writeHeadingFromOpts(sheet, opts)
 
 	values := make([]string, len(opts))
 	for i := 0; i < v.Len(); i++ {
@@ -85,14 +107,9 @@ func WriteToSheet(sheet *xlsx.Sheet, data interface{}) error {
 			pos := orderToCellPos[order]
 			opt := opts[pos]
 			switch val := item.Field(j).Interface().(type) {
-			case int, int8, int16, int32, int64:
-				format := "%d"
-				if opt.hasFormatting() {
-					format = opt.format
-				}
-				values[pos] = fmt.Sprintf(format, val)
-			case float32, float64:
-				format := "%f"
+			// todo maybe pass it to the default case
+			case int, int8, int16, int32, int64, float32, float64, string:
+				format := "%v"
 				if opt.hasFormatting() {
 					format = opt.format
 				}
@@ -138,11 +155,15 @@ func getParseOptions(data reflect.Type) ([]parseOpts, error) {
 	return opts, nil
 }
 
-func writeHeading(sheet *xlsx.Sheet, opts []parseOpts) {
+func writeHeadingFromOpts(sheet *xlsx.Sheet, opts []parseOpts) {
 	var data = make([]string, len(opts))
 	for key, opt := range opts {
 		data[key] = opt.heading
 	}
+	writeRow(sheet, data)
+}
+
+func writeHeading(sheet *xlsx.Sheet, data []string) {
 	writeRow(sheet, data)
 }
 
