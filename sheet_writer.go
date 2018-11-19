@@ -26,7 +26,7 @@ var (
 	ErrHeadingPropRequired    = errors.New("heading property must be set")
 )
 
-var marshallerType = reflect.TypeOf((*Marshaller)(nil))
+var marshallerType = reflect.TypeOf((Marshaller)(nil))
 
 // todo think about name correctness
 type parseOpts struct {
