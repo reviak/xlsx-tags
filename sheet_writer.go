@@ -58,7 +58,7 @@ func WriteToSheet(sheet *xlsx.Sheet, data interface{}) error {
 		return ErrUnsupportedContentType
 	}
 
-	if itemsType.Implements(marshallerType) {
+	if v.Type().Implements(marshallerType) {
 		return writeWithMarshaller(sheet, data)
 	} else {
 		return writeWithTags(sheet, data)
