@@ -4,3 +4,4 @@ Currently targeted for solving simplest problem - writing list data to the speci
 
 ### TODOs
 - [ ] Sheet builder
+- [ ] Cover with tests
